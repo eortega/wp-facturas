@@ -282,6 +282,7 @@ function facturas_page(){
 				echo "<th>No.</th>";
 				echo "<th>Llave</th>";
 				echo "<th>Cliente</th>";
+				echo "<th>id Cliente</th>";
 				echo "<th>PDF</th>";
 				echo "<th>XLS</th>";
 				echo "<th>Estatus</th>";
@@ -297,10 +298,30 @@ function facturas_page(){
 				echo "<td style = 'text-align:center; '>".$counter."</td>";
 				echo "<td style = 'text-align:center; '>".$factura['key_files']."</td>";
 				echo "<td style = 'text-align:center; '>".$factura['E']."</td>";
+				echo "<td>";
+				
+				$user = reset(
+					 get_users(
+					  array(
+						  'meta_key' => 'folio',
+						  'meta_value' => trim($factura['E']),
+						  'number' => 1,
+						  'count_total' => false
+				  )
+				 )
+				);
+				
+				if($user){
+					echo "<img src='".plugins_url('images/ok.png', __FILE__)."' />";
+					//print_r($user->data->ID);
+				}else
+					echo "<img src='".plugins_url('images/no.png', __FILE__)."' />";
+				
+				echo "</td>";
 				echo "<td style = 'text-align:center; '> <img alt='Ok' src='".plugins_url('images/'.$pdf.'.png', __FILE__)."'/></td>";
 				echo "<td style = 'text-align:center; '><img alt='Error' src='".plugins_url('images/'.$xml.'.png', __FILE__)."'/></td>";
 				
-				$estatus = ($pdf=='ok' || $xml=='ok') ? create_post($factura, $pdf=='ok'?true:null , $xml=='ok'?true:null , $http_link) : false;
+				$estatus = (($pdf=='ok' || $xml=='ok') && $user) ? create_post($factura, $pdf=='ok'?true:null , $xml=='ok'?true:null , $http_link) : false;
 				
 				$estatus= $estatus ? " <a href='{$home}?p={$estatus}'><img src='".plugins_url('images/ver.png', __FILE__)."' /></a> ":"<img src='".plugins_url('images/no.png', __FILE__)."' />";
 				
