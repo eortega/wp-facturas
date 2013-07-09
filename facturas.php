@@ -144,7 +144,7 @@ function facturas_page(){
 					end($files1);
 					$last_id=key($files1);
 					$contenedora = $extract_to.'/'.$files1[$last_id];
-				//	echo "Carpeta contenedora: ".$contenedora;
+					//echo "Carpeta contenedora: ".$contenedora."<br/>";
 				//	echo "<br/>";
 					$files2 = scandir($contenedora);
 					echo "<br/>";
@@ -175,7 +175,7 @@ function facturas_page(){
 						
 						if(!is_null($master_file)){
 						
-							//echo "<br/> <div style='background-color:blue; color: white; width:100%;'> <b>Archivo Maestro Encontrado</b><br/>{$master_file}</div>";
+							echo "<br/> <div style='background-color:blue; color: white; width:100%;'> <b>Archivo Maestro Encontrado</b><br/>{$master_file}</div>";
 							echo "Archivo maestro encontrado";
 						
 							//Verificar formato del maestro
@@ -232,7 +232,7 @@ function facturas_page(){
 									/**
 									Buscar los archivos basados en el formato
 									**/
-									search_files($info_values, $contenedora);
+									search_files($info_values, $contenedora,$factura['C'].preg_replace('/[^0-9]/', '', $factura['D']));
 									/**
 									 Crear los post adjuntando los archivos y relacionarlos con los usuario $master_file
 									 **/
@@ -269,7 +269,11 @@ function facturas_page(){
 		
 	}
 	
-	function search_files($relacion, $path){
+	function search_files($relacion, $path, $num_factura){
+		
+		$url_http= substr($path, strpos ( $path , '/upload/'));
+		$http_link =plugins_url($url_http, __FILE__);
+		$home =  home_url();
 		$counter=1;
 		
 		echo "<br/>Buscando los archivos necesarios:<br/>";
@@ -280,12 +284,13 @@ function facturas_page(){
 				echo "<th>Cliente</th>";
 				echo "<th>PDF</th>";
 				echo "<th>XLS</th>";
+				echo "<th>Estatus</th>";
 			echo "</tr>";
 		
 		
 		foreach($relacion as $factura){
-			$pdf =  (file_exists($path.'/'.$factura['key_files'].'.pdf') || file_exists($path.'/'.$factura['key_files'].'.PDF')) ? 'ok' : 'no'; 
-			$xml =  (file_exists($path.'/'.$factura['key_files'].'.xml') || file_exists($path.'/'.$factura['key_files'].'.XML'))? 'ok' : 'no'; 
+			$pdf =  file_exists($path.'/'.$factura['key_files'].'.pdf') ? 'ok' : 'no'; 
+			$xml =  file_exists($path.'/'.$factura['key_files'].'.xml') ? 'ok' : 'no'; 
 		
 			
 			echo "<tr>";
@@ -294,10 +299,70 @@ function facturas_page(){
 				echo "<td style = 'text-align:center; '>".$factura['E']."</td>";
 				echo "<td style = 'text-align:center; '> <img alt='Ok' src='".plugins_url('images/'.$pdf.'.png', __FILE__)."'/></td>";
 				echo "<td style = 'text-align:center; '><img alt='Error' src='".plugins_url('images/'.$xml.'.png', __FILE__)."'/></td>";
+				
+				$estatus = ($pdf=='ok' || $xml=='ok') ? create_post($factura, $pdf=='ok'?true:null , $xml=='ok'?true:null , $http_link) : false;
+				
+				$estatus= $estatus ? " <a href='{$home}?p={$estatus}'><img src='".plugins_url('images/ver.png', __FILE__)."' /></a> ":"<img src='".plugins_url('images/no.png', __FILE__)."' />";
+				
+				echo "<td style = 'text-align:center; '>{$estatus}</td>";
 			echo "</tr>";
 			
 			$counter++;
 		}
 		echo "</table>";
 	}
+	
+	function create_post($factura, $pdf=null, $xml=null, $http_link){
+		
+		global $current_user;
+		      get_currentuserinfo();
+
+		if($factura['E']){
+
+			$links = "<br/> ";
+			
+			if(!is_null($pdf)){
+				
+				$links.="<a href = '{$http_link}/{$factura['key_files']}.pdf' ><img alt='Descargar' src='".plugins_url('images/pdf.png', __FILE__)."'/> </a>";
+				
+			}
+			
+			if(!is_null($xml)){
+				//echo 'xml->';
+				$links.="<a href = '{$http_link}/{$factura['key_files']}.xml' target='_blank' ><img alt='Descargar' src='".plugins_url('images/xml.png', __FILE__)."'/></a>";
+			}
+			
+			$texto = '<div style="text-align:left; "><table style="width:100%;"> <tr><th> </th>  <th> </th></tr>';
+			$texto.='<tr><td><b>Fecha de Expedición</b></td> <td>'.$factura['K'].'</td></tr>';
+			$texto.='<tr><td><b>Concepto</b> </td> <td>'.$factura['H'].'</td></tr>';
+			$texto.='<tr><td><b>Neto</b> </td> <td>'.$factura['L'].'</td></tr>';
+			$texto.='<tr><td><b>Impuesto</b> </td> <td>'.$factura['N'].'</td></tr>';
+			$texto.='<tr><td><b>Total</b> </td> <td>'.$factura['O'].'</td></tr>';									
+			$texto.='<tr><td><b>Descargas</b> </td> <td>'.$links.'</td> </tr>';
+			$texto.='</table> </div>';
+
+			$my_post = array(
+			  'post_title'    => 'Factura '.$factura['key_files'].' '.date('m-d-Y',strtotime($factura['K'])),
+  			  'post_type'     => 'post',
+			  'comment_status'=> 'closed',
+			  'post_parent'   => 0,
+			  'post_content'  => $texto,
+			  'post_status'   => 'publish',
+			  'post_author'   => $current_user->ID,
+			  'ping_status'   => get_option('default_ping_status'),
+			  'post_category' => array(get_cat_ID( 'Mis Facturas' )), 
+			 
+			);
+
+			// Insert the post into the database
+			$parent = wp_insert_post( $my_post );
+			
+			//echo $rtrn;
+			return $parent;
+		}
+		
+		return false;
+	}
+	
+
 ?>
