@@ -44,13 +44,15 @@ add_action('admin_menu', 'prowp_facturas_menu');
 function facturas_page(){
 	echo "<h1>Subir Facturas</h1>";
 	
+	//var_dump($_FILES);
+	//var_dump($_POST);
 	
 	if(isset($_FILES) && !empty($_FILES)){
   		$allowedExts = array("zip");
   		$temp = explode(".", $_FILES["file"]["name"]);
   		$extension = end($temp);
 		
-		//print_r($_FILES);
+		
 		
 		if ((($_FILES["file"]["type"] == "application/zip"))&& in_array($extension, $allowedExts)){
 			
@@ -60,7 +62,7 @@ function facturas_page(){
 			}else{
 				$new_filename=date('d_m_Y_H_i_s', strtotime('now'));
 				
-		  /*  echo "Upload: " . $_FILES["file"]["name"] . "<br>";
+		   /* echo "Upload: " . $_FILES["file"]["name"] . "<br>";
 		    echo "Type: " . $_FILES["file"]["type"] . "<br>";
 		    echo "Size: " . ($_FILES["file"]["size"] / 1024) . " kB<br>";
 		    echo "Stored in: " . $_FILES["file"]["tmp_name"]."<br/>";
@@ -76,8 +78,27 @@ function facturas_page(){
 				  if(move_uploaded_file($_FILES["file"]["tmp_name"], $uploadfile )){
 					  echo "<br/>El Archivo se ha subido correctamente.";
 					  
-					  //Descompresión de archivo zip
-					  unzip_facturas($uploadfile);
+					  //Descompresión de archivo zip, recibimos el master 
+						 $dispersion = unzip_facturas($uploadfile);
+						 
+						 if($dispersion){
+							 $master_header = verify_master_file($dispersion['master']);
+							 
+							// array('master'=>$master_file,'contenedora'=>$contenedora );
+							 
+							 if((count($master_header['header']) > 0) && (count($master_header['data']) > 0)){
+
+								 echo "<br/> Se encontraron ".count($master_header['data'])." registros";
+
+								create_all(	$master_header['data'], $dispersion['contenedora']);
+								
+							 }else{
+								 echo "Sn datos de encabezado ni detalles de relaciones";
+							 }
+							 
+						 }else
+							 echo "No se encontró el archivo maestro";
+						 
 					  
 				  }else{
 					  echo "<pre>";
@@ -86,8 +107,6 @@ function facturas_page(){
 				  }
 				  
 		    }
-			  
-			  
 			  
 		    }
 		  
@@ -109,7 +128,8 @@ function facturas_page(){
 	}
 }
 
-	
+//descomprime y regresa el path del archivo maestro.
+
 	function unzip_facturas($path){
 		$array_files= array();
 		$master_file = null;
@@ -118,158 +138,54 @@ function facturas_page(){
 		$num_rows = 0;
 		$info_values = null;
 		
-		
-		//echo "<br/> Descomprimiento las facturas de {$path}";
 		// Crear folder para guardar las facturas de forma temporal
 		$extract_to = str_replace ('.zip' , '', $path);
 		
-			
-		
 		if(!mkdir($extract_to, 0700, true)){
-		    die('Fallo al crear carpetas...');
+			echo 'Fallo al crear la carpeta para extraer los archivos...'; 
 		}else{
 			chmod($extract_to, 0700);
 			//echo "<br/> Descomprimiento las facturas en {$extract_to}";
-			
 			$zip = new ZipArchive;
 		
 			if ($zip->open($path) === TRUE) {
-			    $zip->extractTo($extract_to);
-			    $zip->close();
-			    echo '<br/>La carpeta se descomprimió correctamente';
+			    
+				if($zip->extractTo($extract_to)){
 				
-				$dir    = $extract_to;
-				$files1 = scandir($dir);
-				echo "<pre>";
+					$zip->close();
+				    echo '<br/>La carpeta se descomprimió correctamente';
+					$files1 = scandir($extract_to);
 					end($files1);
 					$last_id=key($files1);
 					$contenedora = $extract_to.'/'.$files1[$last_id];
-					//echo "Carpeta contenedora: ".$contenedora."<br/>";
-				//	echo "<br/>";
 					$files2 = scandir($contenedora);
-					echo "<br/>";
-					
 					
 					foreach($files2 as $f){
 						$file_parts = pathinfo($contenedora.'/'.$f);
 						$base_name = strtolower($file_parts['basename']);
 
-						 if(($base_name =='master.xls')|| ($base_name=='master.xlsx')){
-							 $master_file = $contenedora.'/'.$f;	
-						 }
-							 
-						if(	($file_parts['extension']=='xml') 
-							|| ($file_parts['extension']=='pdf') 
-							||  ($file_parts['extension']=='xls')
-							|| ($file_parts['extension']=='xlsx')
-							){
-							array_push($array_files,$contenedora.'/'.$f);
-						}
-					
-					}	
-					
-					echo "<br/>";
-					if(count($array_files) > 0){
+						if(($base_name =='master.xls')|| ($base_name=='master.xlsx'))
+							$master_file = $contenedora.'/'.$f;	
 						
-						//var_dump($array_files);
+					}
 						
-						if(!is_null($master_file)){
+					unlink($path);
+					return array('master'=>$master_file,'contenedora'=>$contenedora );
 						
-							echo "<br/> <div style='background-color:blue; color: white; width:100%;'> <b>Archivo Maestro Encontrado</b><br/>{$master_file}</div>";
-							echo "Archivo maestro encontrado";
-						
-							//Verificar formato del maestro
-							//echo 'Loading file ',pathinfo($inputFileName,PATHINFO_BASENAME),' using IOFactory to identify the format<br />';
-							$objPHPExcel = PHPExcel_IOFactory::load($master_file);
-
-
-
-							$sheetData = $objPHPExcel->getActiveSheet()->toArray(null,true,true,true);
-							
-							//var_dump($sheetData);
-							$num_rows = count($sheetData);
-							
-							foreach($sheetData as $key=>$r){
-								$values= array_values($r);
-								$upper_arr= array_map('strtoupper', $values);
-								
-								$haystack = array('FOLIO', 'CLIENTE', 'SERIE');
-
-								if(count(array_intersect($haystack, $upper_arr)) > 2){
-								    // all of $target is in $haystack
-									$header=$key;
-									$header_data = $r;
-									break;
-									
-								}
-								
-							}//end foreach
-								
-							if(!is_null($key)){
-								$info_values= array_slice($sheetData, $header);
-							}else
-								echo "<br/>No se encontró la cabecera";
-							
-							
-
-							if(count($header_data)){
-								echo "<br/>Header Encontrado<br/>";
-								//print_r($header_data);
-								
-							//	echo "La llave se formará con {$header_data['C']} + {$header_data['D']}";
-								
-								if(count($info_values) > 0){
-									$reg = count($info_values);
-									echo "<br/>Se encontraron {$reg} registros<br/>";
-									
-									foreach($info_values as $key=>$factura){
-										//print_r($factura);
-										$info_values[$key]['key_files']=$factura['C'].preg_replace('/[^0-9]/', '', $factura['D']);
-										//$factura['folio']='llave_files';
-										
-									}
-									
-									/**
-									Buscar los archivos basados en el formato
-									**/
-									search_files($info_values, $contenedora,$factura['C'].preg_replace('/[^0-9]/', '', $factura['D']));
-									/**
-									 Crear los post adjuntando los archivos y relacionarlos con los usuario $master_file
-									 **/
-									//print_r($info_values);
-								}else
-									echo "No se encotraron relaciones de facturas con clientes.";
-							}else{
-								echo "No se encotraron los encabezados en el archivo maestro.";
-							}
-								
-							
-						
-						
-						}else{
-							echo "<br/> <div style='background-color:red; color: white; width:100%;'> El archivo maestro no se encontró. </div>";
-						}
-						
-					}else
-						echo "La carpeta no contiene ningun archivo con el formato esperado.";
-					
-				echo "</pre>";
-				
-				
-				
-								
+				}else{
+					echo "<br/>No fué posible descomprimir el archivo, inténte de nuevo.";
+				}			    
+	
 			} else {
-			    echo '<br/>Los archivos no se han podido extraer, inténte nuevamente por favor.';
+			    echo '<br/>No se ha podido leer el archivo .zip.';
 			}
 			
 		}
 		
-		
-		
-		
+		return false;
 	}
 	
-	function search_files($relacion, $path, $num_factura){
+	function create_all($relacion, $path){
 		
 		$url_http= substr($path, strpos ( $path , '/upload/'));
 		$http_link =plugins_url($url_http, __FILE__);
@@ -290,27 +206,19 @@ function facturas_page(){
 		
 		
 		foreach($relacion as $factura){
-			$pdf =  file_exists($path.'/'.$factura['key_files'].'.pdf') ? 'ok' : 'no'; 
-			$xml =  file_exists($path.'/'.$factura['key_files'].'.xml') ? 'ok' : 'no'; 
-		
+			$factura['key_files']='F'.$factura['B'].str_pad(preg_replace('/[^0-9]/', '', $factura['C']), 10, "0", STR_PAD_LEFT);
 			
+			$pdf =  file_exists($path.'/'.$factura['D'].'/'.$factura['key_files'].'.pdf') ? 'ok' : 'no'; 
+			$xml =  file_exists($path.'/'.$factura['D'].'/'.$factura['key_files'].'.xml') ? 'ok' : 'no'; 
+		
 			echo "<tr>";
 				echo "<td style = 'text-align:center; '>".$counter."</td>";
 				echo "<td style = 'text-align:center; '>".$factura['key_files']."</td>";
 				echo "<td style = 'text-align:center; '>".$factura['E']."</td>";
 				echo "<td>";
 				
-				$user = reset(
-					 get_users(
-					  array(
-						  'meta_key' => 'folio',
-						  'meta_value' => trim($factura['E']),
-						  'number' => 1,
-						  'count_total' => false
-				  )
-				 )
-				);
-				
+				$user = get_user_by( 'login', trim($factura['D']) );
+		
 				if($user){
 					echo "<img src='".plugins_url('images/ok.png', __FILE__)."' />";
 					//print_r($user->data->ID);
@@ -326,12 +234,16 @@ function facturas_page(){
 				$estatus= $estatus ? " <a href='{$home}?p={$estatus}'><img src='".plugins_url('images/ver.png', __FILE__)."' /></a> ":"<img src='".plugins_url('images/no.png', __FILE__)."' />";
 				
 				echo "<td style = 'text-align:center; '>{$estatus}</td>";
-			echo "</tr>";
+				echo "</tr>";
 			
 			$counter++;
 		}
 		echo "</table>";
 	}
+	
+	/**
+	Función para crear los post con las facturas para descargar
+	**/
 	
 	function create_post($factura, $pdf=null, $xml=null, $http_link){
 		
@@ -344,26 +256,27 @@ function facturas_page(){
 			
 			if(!is_null($pdf)){
 				
-				$links.="<a href = '{$http_link}/{$factura['key_files']}.pdf' ><img alt='Descargar' src='".plugins_url('images/pdf.png', __FILE__)."'/> </a>";
+				$links.="<a href = '{$http_link}/{$factura['D']}/{$factura['key_files']}.pdf' ><img alt='Descargar' src='".plugins_url('images/pdf.png', __FILE__)."'/> </a>";
 				
 			}
 			
 			if(!is_null($xml)){
 				//echo 'xml->';
-				$links.="<a href = '{$http_link}/{$factura['key_files']}.xml' target='_blank' ><img alt='Descargar' src='".plugins_url('images/xml.png', __FILE__)."'/></a>";
+				$links.="<a href = '{$http_link}/{$factura['D']}/{$factura['key_files']}.xml' target='_blank' ><img alt='Descargar' src='".plugins_url('images/xml.png', __FILE__)."'/></a>";
 			}
 			
 			$texto = '<div style="text-align:left; "><table style="width:100%;"> <tr><th> </th>  <th> </th></tr>';
-			$texto.='<tr><td><b>Fecha de Expedición</b></td> <td>'.$factura['K'].'</td></tr>';
-			$texto.='<tr><td><b>Concepto</b> </td> <td>'.$factura['H'].'</td></tr>';
+			$texto.='<tr><td><b>Fecha de Expedición</b></td> <td>'.$factura['J'].'</td></tr>';
+			$texto.='<tr><td><b>Estado</b> </td> <td>'.$factura['I'].'</td></tr>';
 			$texto.='<tr><td><b>Neto</b> </td> <td>'.$factura['L'].'</td></tr>';
-			$texto.='<tr><td><b>Impuesto</b> </td> <td>'.$factura['N'].'</td></tr>';
+			$texto.='<tr><td><b>Descuentos</b> </td> <td>'.$factura['M'].'</td></tr>';
+			$texto.='<tr><td><b>Impuestos</b> </td> <td>'.$factura['N'].'</td></tr>';
 			$texto.='<tr><td><b>Total</b> </td> <td>'.$factura['O'].'</td></tr>';									
 			$texto.='<tr><td><b>Descargas</b> </td> <td>'.$links.'</td> </tr>';
 			$texto.='</table> </div>';
 
 			$my_post = array(
-			  'post_title'    => 'Factura '.$factura['key_files'].' '.date('m-d-Y',strtotime($factura['K'])),
+			  'post_title'    => 'Factura '.$factura['key_files'].' '.date('m-d-Y',strtotime($factura['J'])),
   			  'post_type'     => 'post',
 			  'comment_status'=> 'closed',
 			  'post_parent'   => 0,
@@ -385,5 +298,33 @@ function facturas_page(){
 		return false;
 	}
 	
+	/**
+	Verifica que exista el encabezado esperado en el maestro
+	**/
+	
+	function verify_master_file($master_file){
+		$header_data = null;
 
+		$objPHPExcel = PHPExcel_IOFactory::load($master_file);
+		$sheetData = $objPHPExcel->getActiveSheet()->toArray(null,true,true,true);
+							
+		$num_rows = count($sheetData);
+							
+		foreach($sheetData as $key=>$r){
+			$values= array_values($r);
+			$upper_arr= array_map('strtoupper', $values);
+								
+			$haystack = array('FOLIO', 'CLIENTE', 'SERIE');
+
+			if(count(array_intersect($haystack, $upper_arr)) > 2){
+			    // all of $target is in $haystack
+				$header=$key;
+				$header_data = $r;
+				break;
+			}
+								
+		}//end foreach
+		
+		return array('header'=>$header_data, 'data'=>array_slice($sheetData, $header) );
+	}
 ?>
