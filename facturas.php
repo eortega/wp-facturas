@@ -16,7 +16,7 @@ if ( ! defined( 'WPINC' ) ) {
 
 /** PHPExcel_IOFactory */
 include_once  ABSPATH . 'wp-content/plugins/excel_reader/PHPExcel/IOFactory.php';
-
+wp_register_style( 'facturas', plugins_url( 'css/style.css', __FILE__ ) );
 
 include_once(ABSPATH.'/wp-config.php');
 #el domino del host
@@ -191,7 +191,7 @@ function include_facturas_template( $template_path ) {
    	return plugin_dir_path( __FILE__ ) . 'page-facturas.php';
 
 }
-add_filter( 'template_include', 'include_facturas_template', 1);
+//add_filter( 'template_include', 'include_facturas_template', 1);
 
 /*
 function wpse114181_template_include( $template ) {
@@ -242,8 +242,6 @@ add_action('admin_menu', 'prowp_facturas_menu');
 
 function facturas_page(){
 	echo "<h1>Subir Facturas</h1>";
-	//var_dump($_FILES);
-	//var_dump($_POST);
 	
 	if(isset($_FILES) && !empty($_FILES)){
   		$allowedExts = array("zip");
@@ -267,8 +265,7 @@ function facturas_page(){
 					$uploadfile = plugin_dir_path( __FILE__ ).'upload/'.$new_filename.'.zip'; // 
 				
 				  	if(move_uploaded_file($_FILES["file"]["tmp_name"], $uploadfile )){
-						//echo "<br/>El Archivo se ha subido correctamente.";
-					  	//Descompresión de archivo zip, recibimos el master 
+						//Descompresión de archivo zip, recibimos el master 
 						$dispersion = unzip_facturas($uploadfile);
 					
 						
@@ -487,10 +484,6 @@ function facturas_page(){
 		global $current_user;
 		get_currentuserinfo();
 		
-		echo "<pre>";
-		var_dump($factura);
-		echo "</pre>";
-		die();
 		
 		if($factura['cliente']){
 
@@ -597,6 +590,134 @@ function facturas_page(){
 		
 		return array('header'=>false, 'data'=>false );
 	}
+	
+	
+	
+	function func_facturas_shortcode( $atts ) {
+	      $atts = shortcode_atts( array(
+	 	      'foo' => 'no foo',
+	 	      'baz' => 'default baz'
+	      ), $atts );
+		  wp_enqueue_style('facturas');
+		  if(is_user_logged_in() ){
+			 global $current_user;
+	  		$user_roles = $current_user->roles;
+	  		$user_role = array_shift($user_roles);
+					
+					
+				if($user_role=='administrator'){
+					$args = array(
+						'post_type' => 'facturas',
+						'post_status'=>'published',
+						'posts_per_page' => 20,
+						'paged' => get_query_var( 'paged' )
+					);
+				}else{
+					
+					$args = array(
+						'post_type' => 'facturas',
+						'post_status'=>'published',
+						'posts_per_page' => 20,
+						'paged' => get_query_var( 'paged' ),
+						'meta_query' => array(
+								array(
+									'key'     => 'factura_idCliente',
+									'value'   => $current_user->user_login,
+									//'compare' => 'NOT LIKE',
+								),
+							),
+					);
+					
+				}
+					//      var_dump($args);
+				 $the_query = new WP_Query($args );
+			 
+				 if ( $the_query->have_posts() ) :
+					 while ( $the_query->have_posts() ) : $the_query->the_post();
+						 echo "<article class='factura'>";
+							$meta = get_post_meta( get_the_ID() );
+							//var_dump($meta);
+							?>
+							<table class="facturas">
+								<tr class="title_factura"><th colspan=3><?php the_title(); ?></th></tr>
+								<tr><td>Fecha de Expedición</td>
+									<td><?php echo isset($meta['factura_fecha_de_expedicion'][0]) ? $meta['factura_fecha_de_expedicion'][0]:'No agregado'; ?> </td>
+									<td class="downloads" rowspan="6">
+										<?php
+										$urls=	$meta['factura_descargas'][0];
+										$urls= explode(',', $urls);
+										
+										foreach($urls as $link){
+											$link_tokens = explode("/", $link);
+											$filename = $link_tokens[count($link_tokens)-1];
+											$filename_tokens = explode(".", $filename);
+											$extension = $filename_tokens[count($filename_tokens)-1];
+											
+											if(strtolower($extension) == 'zip'){
+												$img = "<img src='".plugins_url('images/zip.png', __FILE__)."' alt='Descargar ZIP' />";
+											}
+											
+											if(strtolower($extension) == 'pdf'){
+												$img = "<img src='".plugins_url('images/pdf.png', __FILE__)."' alt='Descargar PDF' />";
+											}
+											
+											if(strtolower($extension) == 'xml'){
+												$img = "<img src='".plugins_url('images/xml.png', __FILE__)."' alt='Descargar XML' />";
+											}
+											
+											
+											echo "<a href='$link'>".$img."</a>";
+										}
+										
+										?>
+									</td></tr>
+								<tr><td>Estado</td>
+									<td>
+										<?php echo isset($meta['factura_estado'][0]) ? $meta['factura_estado'][0]:'No agregado'; ?>
+									</td>
+								</tr>
+								<tr><td>Neto</td>
+									<td>
+									<?php echo isset($meta['factura_neto'][0]) ? "$ ".number_format((float)$meta['factura_neto'][0], 2, '.', ''):'No agregado'; ?>
+									</td>
+								</tr>
+								<tr><td>Descuentos</td>
+									<td>
+										<?php echo isset($meta['factura_descuentos'][0]) ? "$ ".number_format((float)$meta['factura_descuentos'][0], 2, '.', ''):'No agregado'; ?>
+									</td>
+								</tr>
+								<tr><td>Impuestos</td>
+									<td>
+										<?php echo isset($meta['factura_impuestos'][0]) ? "$ ".number_format((float)$meta['factura_impuestos'][0], 2, '.', ''):'No agregado'; ?>
+									</td>
+								</tr>
+								<tr><td>Total</td>
+									<td>
+									<?php echo isset($meta['factura_total'][0]) ? "$ ".number_format((float)$meta['factura_total'][0], 2, '.', ''):'No agregado'; ?>
+								</td>
+								</tr>
+									
+							</table>
+							<?php
+						 echo "</article>";
+					 endwhile;
+
+			                                                                 
+					next_posts_link( '<-Facturas Anteriores', $the_query->max_num_pages );
+					previous_posts_link( ' :: Facturas Más Recientes->' );
+                	wp_reset_postdata();
+
+				else:
+			 		_e( 'No hemos encontrado facturas para ti.' );
+					echo "</br>";
+				endif;
+			 
+	  		}else{
+	  			echo do_shortcode( '[alert type="error"]' . "Debe iniciar sesión para descargar sus facturas" . '[/alert]' );
+	  		}
+	      //return "foo = {$atts['foo']}";
+	}
+	add_shortcode( 'facturas', 'func_facturas_shortcode' );
 	
 	#funcion para permisos mike mike
 	/*function permisos_factura($post_id, $user_id){ 

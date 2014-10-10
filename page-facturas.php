@@ -3,7 +3,7 @@
 Template Name: Facturas MS
 **/
 
-extract(etheme_get_page_sidebar(true));
+/*extract(etheme_get_page_sidebar(true));
 
 get_header(); ?>
         <div class="container">
@@ -24,7 +24,7 @@ get_header(); ?>
                                  get_template_part( 'loop', 'single' );
                                 ?>
                         </div><!-- #content -->
-                <?php if($position && $responsive == 'bottom'): ?>
+                <?php /* if($position && $responsive == 'bottom'): ?>
                     <div class="span3 sidebar_grid sidebar_<?php echo $position ?>">
                         <?php get_sidebar($sidebarname); ?>
                     </div>
@@ -32,4 +32,7 @@ get_header(); ?>
                 <div class="clear"></div>
                 </div>
                 </div><!-- .container -->
-<?php get_footer(); ?>
+<?php */
+
+//get_footer(); 
+?>
