@@ -4,7 +4,7 @@ Plugin Name: Facturas
 Plugin URI: http://zenda.mx
 Description: Carga de facturas para Metals and Supplies
 Author: Zenda C.G
-Version: 1.2
+Version: 1.3
 Author URI: 
 */
 
